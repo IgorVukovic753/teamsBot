@@ -23,7 +23,7 @@ namespace Microsoft.BotBuilderSamples
         protected readonly Intents Intents;
 
         public MainDialog(IConfiguration configuration, IStatePropertyAccessor<AuthenticatedUser> AuthenticatedUserAccessor, IBotServices botServices, Intents intents)
-             : base(nameof(MainDialog), configuration["ConnectionNameForGraphAPI"])
+             : base(nameof(MainDialog), configuration["ConnectionName"])
         {
             Configuration = configuration;
             _AuthenticatedUserAccessor = AuthenticatedUserAccessor;
