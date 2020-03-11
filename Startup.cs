@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Integration.AspNet.Core;
+using Microsoft.Bot.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TeamsAuth;
 
 namespace Microsoft.BotBuilderSamples
 {
@@ -19,6 +21,9 @@ namespace Microsoft.BotBuilderSamples
 
             // Create the Bot Framework Adapter with error handling enabled.
             services.AddSingleton<IBotFrameworkHttpAdapter, AdapterWithErrorHandler>();
+
+            // Create the bot services (LUIS, QnA) as a singleton.
+            services.AddSingleton<IBotServices, BotServices>();
 
             // Create the storage we'll be using for User and Conversation state. (Memory is great for testing purposes.)
             services.AddSingleton<IStorage, MemoryStorage>();
@@ -33,7 +38,7 @@ namespace Microsoft.BotBuilderSamples
             services.AddSingleton<MainDialog>();
 
             // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
-            services.AddTransient<IBot, TeamsBot<MainDialog>>();
+            services.AddTransient<IBot, TeamsBot>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
