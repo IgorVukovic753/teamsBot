@@ -110,5 +110,26 @@ namespace TeamsAuth.APIHandlers
 
         }
     }
+
+    public class APIResults
+    {
+        public APIResults()
+        {
+
+        }
+        public List<APIResult> APIResultList { get; set; }
+
+        public void Add(APIResult result)
+        {
+            if (APIResultList == null)
+                this.APIResultList = new List<APIResult>();
+
+            if (APIResultList.Count() > 10)
+                this.APIResultList.RemoveAt(0);
+
+            this.APIResultList.Add(result);
+
+        }
+    }
     public enum APIResultCode { Ok, Error }
 }

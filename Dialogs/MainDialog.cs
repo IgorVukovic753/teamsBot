@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +11,7 @@ using Microsoft.Bot.Schema;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TeamsAuth;
+using TeamsAuth.APIHandlers;
 using TeamsAuth.Config;
 using TeamsAuth.Dialogs;
 
@@ -41,13 +43,16 @@ namespace Microsoft.BotBuilderSamples
                     Timeout = 300000, // User has 5 minutes to login (1000 * 60 * 5)
                 }));
 
-            AddDialog(new ConfirmPrompt(nameof(ConfirmPrompt)));
+            //AddDialog(new ConfirmPrompt(nameof(ConfirmPrompt)));
+
+            AddAllPossibleDialogs();
 
             AddDialog(new WaterfallDialog(nameof(WaterfallDialog), new WaterfallStep[]
             {
                 PromptStepAsync,
                 LoginStepAsync,
                 StartProcessingIntents,
+                EndProcessingIntents
             }));
 
             // The initial child Dialog to run.
@@ -56,15 +61,40 @@ namespace Microsoft.BotBuilderSamples
 
         private async Task<DialogTurnResult> PromptStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            return await stepContext.BeginDialogAsync(nameof(OAuthPrompt), null, cancellationToken);
+            var authenticatedUserIsAuthenticated = await _AuthenticatedUserAccessor.GetAsync(stepContext.Context, () => new AuthenticatedUser());
+
+            if (authenticatedUserIsAuthenticated.IsAuthenticated)
+            {
+                return await stepContext.ContinueDialogAsync();
+            }
+            else
+            {
+                return await stepContext.BeginDialogAsync(nameof(OAuthPrompt), null, cancellationToken);
+            }
+
+            //return await stepContext.BeginDialogAsync(nameof(OAuthPrompt), null, cancellationToken);
         }
         private async Task<DialogTurnResult> LoginStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
+
+            var authenticatedUserIsAuthenticated = await _AuthenticatedUserAccessor.GetAsync(stepContext.Context, () => new AuthenticatedUser());
+
+            if (authenticatedUserIsAuthenticated.IsAuthenticated)
+            {
+                return await stepContext.ContinueDialogAsync();
+            }
+
             // Get the token from the previous step. Note that we could also have gotten the
             // token directly from the prompt itself. There is an example of this in the next method.
             var tokenResponse = (TokenResponse)stepContext.Result;
             if (tokenResponse?.Token != null)
             {
+                AuthenticatedUser AuthenticatedUser = new AuthenticatedUser();
+                AuthenticatedUser.IsAuthenticated = true;
+                AuthenticatedUser.JwtSecurityToken = tokenResponse.Token;
+
+                await _AuthenticatedUserAccessor.SetAsync(stepContext.Context, AuthenticatedUser);
+
                 // Pull in the data from the Microsoft Graph.
                 var client = new SimpleGraphClient(tokenResponse.Token);
                 var me = await client.GetMeAsync();
@@ -73,10 +103,13 @@ namespace Microsoft.BotBuilderSamples
 
                 await stepContext.Context.SendActivityAsync($"You're logged in as {me.DisplayName} ({me.UserPrincipalName}); you job title is: {title}");
 
-                return await stepContext.PromptAsync(nameof(ConfirmPrompt), new PromptOptions { Prompt = MessageFactory.Text("Would you like to view your token?") }, cancellationToken);
+                await stepContext.Context.SendActivityAsync("Your intent please:");
+
+                //return await stepContext.PromptAsync(nameof(ConfirmPrompt), new PromptOptions { Prompt = MessageFactory.Text("Your intent please:") }, cancellationToken);
             }
 
-            await stepContext.Context.SendActivityAsync(MessageFactory.Text("Login was not successful please try again."), cancellationToken);
+            //await stepContext.Context.SendActivityAsync(MessageFactory.Text("Login was not successful please try again."), cancellationToken);
+
             return await stepContext.EndDialogAsync(cancellationToken: cancellationToken);
         }
         private async Task<DialogTurnResult> StartProcessingIntents(WaterfallStepContext stepContext, CancellationToken cancellationToken)
@@ -99,7 +132,68 @@ namespace Microsoft.BotBuilderSamples
                 var topIntent = recognizerResult.GetTopScoringIntent();
 
                 // Next, we call the dispatcher with the top intent.
-                return await DispatchToTopIntentAsync(stepContext, topIntent.intent, recognizerResult, cancellationToken);
+                 return await DispatchToTopIntentAsync(stepContext, topIntent.intent, recognizerResult, cancellationToken);
+            }
+
+            return await stepContext.EndDialogAsync();
+        }
+
+        private async Task<DialogTurnResult> EndProcessingIntents(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        {
+            var authenticatedUserIsAuthenticated = await _AuthenticatedUserAccessor.GetAsync(stepContext.Context, () => new AuthenticatedUser());
+            // var apiResults = await _AuthenticatedUserAccessor.GetAsync(stepContext.Context, () => new APIResults());
+
+            if (stepContext.Result == null || stepContext.Result.GetType() != typeof(Intent))
+            {
+                return await stepContext.EndDialogAsync();
+            }
+
+            Intent executingIntent = (Intent)stepContext.Result;
+
+            // now call graph API
+            // bur check if token expired
+            if (authenticatedUserIsAuthenticated.IsAuthenticated /*&& authenticatedUserIsAuthenticated.Expiration > DateTime.UtcNow*/)
+            {
+                executingIntent.Offset = stepContext.Context.Activity.LocalTimestamp.Value.Offset;
+                Type T = System.Reflection.Assembly.GetExecutingAssembly().GetType(executingIntent.APIEndpointHandler);
+                APIHandler apiHandler = Activator.CreateInstance(T, new object[] { authenticatedUserIsAuthenticated.JwtSecurityToken }) as APIHandler;
+                APIResult result = await apiHandler.ExecuteAPI(executingIntent);
+
+                // await stepContext.Context.SendActivityAsync(MessageFactory.Text(string.Format(executingIntent.ConfirmationText, executingIntent.RequiredEntities.Select(entity => entity.Value).ToArray())), cancellationToken);
+
+                if (result.Code == APIResultCode.Ok)
+                {
+                    if (authenticatedUserIsAuthenticated.APIResults == null)
+                    {
+                        authenticatedUserIsAuthenticated.APIResults = new APIResults();
+                    }
+
+                    authenticatedUserIsAuthenticated.APIResults.Add(result);
+
+                    await stepContext.Context.SendActivityAsync(MessageFactory.Text(result.ResultText), cancellationToken);
+                }
+                else
+                {
+                    await stepContext.Context.SendActivityAsync(MessageFactory.Text(result.ErrorText), cancellationToken);
+                    //Logger.LogInformation(result.ErrorText);
+                }
+
+                await stepContext.Context.SendActivityAsync(MessageFactory.Text("You can make your other request"), cancellationToken);
+            }
+            else
+            {
+
+                // log in again 
+
+                authenticatedUserIsAuthenticated.IsAuthenticated = false;
+
+                await _AuthenticatedUserAccessor.SetAsync(stepContext.Context, authenticatedUserIsAuthenticated, cancellationToken);
+
+                await stepContext.Context.SendActivityAsync(MessageFactory.Text($"Session expired. Please, login again."), cancellationToken);
+
+                await stepContext.EndDialogAsync();
+                return await stepContext.BeginDialogAsync(this.InitialDialogId);
+                // return await PromptStepAsync(stepContext, cancellationToken);
             }
 
             return await stepContext.EndDialogAsync();

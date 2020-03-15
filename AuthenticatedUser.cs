@@ -17,7 +17,7 @@ namespace TeamsAuth
         public string UserIdentifier { get; set; }
         public DateTime Expiration { get; set; }
 
-        public APIResult APIResults { get; set; }
+        public APIResults APIResults { get; set; }
 
         public string GivenName
         {

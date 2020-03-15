@@ -18,6 +18,7 @@ namespace TeamsAuth.Dialogs
         private Intent Intent;
         private IStatePropertyAccessor<AuthenticatedUser> _bagAccessor;
         private const string PersistedValues = "values";
+        private const string SlotName = "slot";
 
         public IntentProcessingDialog(string dialogId, Intent intent, IStatePropertyAccessor<AuthenticatedUser> bagAccessor)
             : base(dialogId)
@@ -97,6 +98,22 @@ namespace TeamsAuth.Dialogs
 
             // return ProcessLogicCalendarCreateCalendarEntry(state, dialogContext, cancellationToken);
 
+        }
+
+        public Task<DialogTurnResult> ProcessLogic_CalendarFindCalendarEntry(Intent intent, DialogContext dialogContext, CancellationToken cancellationToken)
+        {
+            var unfilledEntity = intent.RequiredEntities.Find(k => k.Value == null && k.Mandatory == true);
+
+            if (unfilledEntity != null)
+            {
+                dialogContext.ActiveDialog.State[SlotName] = unfilledEntity.Name;
+                return dialogContext.BeginDialogAsync(unfilledEntity.Name, new PromptOptions() { Prompt = MessageFactory.Text(unfilledEntity.Prompt) }, cancellationToken);
+            }
+            else
+            {
+
+                return dialogContext.EndDialogAsync(intent);
+            }
         }
     }
 }
