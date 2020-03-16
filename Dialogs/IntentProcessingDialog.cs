@@ -115,5 +115,37 @@ namespace TeamsAuth.Dialogs
                 return dialogContext.EndDialogAsync(intent);
             }
         }
+
+        public Task<DialogTurnResult> ProcessLogic_ProfileInformation(Intent intent, DialogContext dialogContext, CancellationToken cancellationToken)
+        {
+            var unfilledEntity = intent.RequiredEntities.Find(k => k.Value == null && k.Mandatory == true);
+
+            if (unfilledEntity != null)
+            {
+                dialogContext.ActiveDialog.State[SlotName] = unfilledEntity.Name;
+                return dialogContext.BeginDialogAsync(unfilledEntity.Name, new PromptOptions() { Prompt = MessageFactory.Text(unfilledEntity.Prompt) }, cancellationToken);
+            }
+            else
+            {
+
+                return dialogContext.EndDialogAsync(intent);
+            }
+        }
+
+        public Task<DialogTurnResult> ProcessLogic_ProfileEmployees(Intent intent, DialogContext dialogContext, CancellationToken cancellationToken)
+        {
+            var unfilledEntity = intent.RequiredEntities.Find(k => k.Value == null && k.Mandatory == true);
+
+            if (unfilledEntity != null)
+            {
+                dialogContext.ActiveDialog.State[SlotName] = unfilledEntity.Name;
+                return dialogContext.BeginDialogAsync(unfilledEntity.Name, new PromptOptions() { Prompt = MessageFactory.Text(unfilledEntity.Prompt) }, cancellationToken);
+            }
+            else
+            {
+
+                return dialogContext.EndDialogAsync(intent);
+            }
+        }
     }
 }
